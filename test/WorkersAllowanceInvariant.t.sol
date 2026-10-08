@@ -101,11 +101,22 @@ contract WorkersAllowanceHandler is Test {
         address nextRecipient = _actor(recipientSeed);
         address venue = actors[secondVenue ? 3 : 2];
         vm.startPrank(admin);
-        token.setFeeRecipient(nextRecipient);
-        token.setTradeVenue(venue, enabled);
+        // Attempt invalid transitions too; failed setters must leave the ghost state intact.
+        if (venues[nextRecipient]) {
+            vm.expectRevert(abi.encodeWithSelector(Workers.InvalidFeeRecipient.selector, nextRecipient));
+            token.setFeeRecipient(nextRecipient);
+        } else {
+            token.setFeeRecipient(nextRecipient);
+            recipient = nextRecipient;
+        }
+        if (enabled && venue == recipient) {
+            vm.expectRevert(abi.encodeWithSelector(Workers.InvalidTradeVenue.selector, venue));
+            token.setTradeVenue(venue, true);
+        } else {
+            token.setTradeVenue(venue, enabled);
+            venues[venue] = enabled;
+        }
         vm.stopPrank();
-        recipient = nextRecipient;
-        venues[venue] = enabled;
     }
 
     function unauthorizedConfiguration(uint256 callerSeed, uint8 action) external {
@@ -143,6 +154,7 @@ contract WorkersAllowanceHandler is Test {
         assertEq(token.owner(), admin);
         assertEq(token.pendingOwner(), address(0));
         assertEq(token.feeRecipient(), recipient);
+        assertFalse(token.isTradeVenue(recipient), "the fee recipient must not also be a venue");
     }
 
     function _recordTransfer(address from, address to, uint256 amount) internal {
@@ -194,7 +206,7 @@ contract WorkersAllowanceInvariantTest is WorkersFixture {
 
     /// @dev Pin meaningful handler transitions as well as random exploration: partial spend,
     /// revocation, insufficient allowance, unlimited approval, insufficient balance, exhaustion,
-    /// venue/treasury aliasing, and every unauthorized administration entry point.
+    /// rejected venue/treasury conflicts, and every unauthorized administration entry point.
     function test_HandlerSequenceExercisesApprovalAndFailureTransitions() public {
         handler.move(0, 2, 50, false);
         handler.spend(0, 1, 2, 100, false);
@@ -217,6 +229,31 @@ contract WorkersAllowanceInvariantTest is WorkersFixture {
         for (uint8 action; action < 4; ++action) {
             handler.unauthorizedConfiguration(0, action);
         }
+        handler.assertState();
+    }
+
+    function test_HandlerExercisesVenueRecipientConflictsAndRecovery() public {
+        // An active venue cannot receive fees, even if it will be disabled by the next call.
+        handler.configure(2, false, false);
+        assertEq(token.feeRecipient(), treasury);
+        assertFalse(token.isTradeVenue(address(venue)));
+        handler.assertState();
+
+        // Once retired, it can receive fees, but reactivation must fail without undoing that update.
+        handler.configure(2, false, true);
+        assertEq(token.feeRecipient(), address(venue));
+        assertFalse(token.isTradeVenue(address(venue)));
+        handler.assertState();
+        handler.spend(2, 3, 2, 100 ether, false);
+        handler.move(3, 0, 100 ether, false);
+        handler.assertState();
+
+        // Moving the treasury away permits reactivation and restores fees on this venue's transfers.
+        handler.configure(4, false, true);
+        assertEq(token.feeRecipient(), treasury);
+        assertTrue(token.isTradeVenue(address(venue)));
+        handler.assertState();
+        handler.spend(2, 3, 2, 100 ether, false);
         handler.assertState();
     }
 }

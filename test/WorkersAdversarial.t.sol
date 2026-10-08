@@ -66,10 +66,8 @@ contract WorkersAdversarialTest is WorkersFixture {
         assertEq(token.totalSupply(), SUPPLY);
     }
 
-    function test_DelegatedSelfTransferWithAllRolesAliasedStillConsumesGrossAllowance() public {
-        address account = address(venue);
-        vm.prank(admin);
-        token.setFeeRecipient(account);
+    function test_DelegatedTreasurySelfTransferStillConsumesGrossAllowance() public {
+        address account = treasury;
         _fund(account, 100 ether);
         vm.prank(account);
         token.approve(spender, 100 ether);
@@ -82,6 +80,29 @@ contract WorkersAdversarialTest is WorkersFixture {
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, spender, 0, 1));
         token.transferFrom(account, account, 1);
         assertEq(token.balanceOf(account), 100 ether);
+        assertEq(token.totalSupply(), SUPPLY);
+    }
+
+    function test_RejectedVenueRecipientUpdatePreservesFeeOnDelegatedSelfTransfer() public {
+        address account = address(venue);
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(Workers.InvalidFeeRecipient.selector, account));
+        token.setFeeRecipient(account);
+        assertEq(token.feeRecipient(), treasury);
+        assertTrue(token.isTradeVenue(account));
+        _fund(account, 100 ether);
+        vm.prank(account);
+        token.approve(spender, 100 ether);
+        vm.prank(spender);
+        assertTrue(token.transferFrom(account, account, 100 ether));
+        assertEq(token.balanceOf(account), 98 ether);
+        assertEq(token.balanceOf(treasury), 2 ether);
+        assertEq(token.allowance(account, spender), 0);
+        vm.prank(spender);
+        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, spender, 0, 1));
+        token.transferFrom(account, account, 1);
+        assertEq(token.balanceOf(account), 98 ether);
+        assertEq(token.balanceOf(treasury), 2 ether);
         assertEq(token.totalSupply(), SUPPLY);
     }
 
