@@ -1,0 +1,25 @@
+{
+  "kind": "custom_token",
+  "token": {
+    "contract": "Workers",
+    "name": "Workers",
+    "symbol": "WORK",
+    "decimals": 18,
+    "constructorArgs": [
+      "$factory",
+      "$poolManager",
+      "$launchNumber",
+      "0xbb85c1b7540d9e7b56f7a595fc1ff7dd07cb0823"
+    ],
+    "totalSupply": "1000000000000000000000000000"
+  },
+  "contracts": [],
+  "pool": {
+    "pairedCurrency": "0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127",
+    "fee": 3000,
+    "tickSpacing": 60,
+    "initialPrice": "125270724187523965593206900"
+  },
+  "economics": {"poolBps":8800,"initialMarketCapWei":"2500000000000000000000","remainderTo":"0xbb85c1b7540d9e7b56f7a595fc1ff7dd07cb0823"},
+  "notes": "Workers mints 1,000,000,000 WORK with 18 decimals once, entirely to the deploying factory. Constructor arguments are factory, PoolManager, uint64 launch number, and initial owner; the owner is the requester's supplied remainder recipient. No application contracts or initialization calls are included. The token's fixed 2% fee is paid in WORK on transfers involving owner-registered trading venues, rounded down in minor units. The fee recipient starts unset and no venues are initially registered; the owner can later configure the recipient and venues. Transfers with neither endpoint registered as a venue, factory-originated calls, and this launch's distributor flows are exempt. The PoolManager cannot be registered as a venue; launch-pool trades with unregistered accounts are untaxed. PoolManager transfers involving a registered venue still pay the 2% fee unless a factory or distributor exemption applies. Pool fee 3000 is the separate 0.3% AMM fee, with tick spacing 60. initialPrice is provenance only: floor(sqrt(initialMarketCapWei / totalSupply) * 2^96), expressed with WORK as currency0 and the selected paired currency as currency1. The deployer derives the actual opening price from the economics and supply using the deployed currency ordering. Ownership uses two-step transfers; renunciation is disabled. There is no externally callable mint, burn, pause, blacklist, seizure, or upgrade function."
+}
