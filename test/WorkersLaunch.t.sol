@@ -38,24 +38,31 @@ contract WorkersLaunchTest is WorkersFixture {
         token.transfer(address(manager), 100 ether);
         assertEq(token.balanceOf(alice), 0);
         assertEq(token.balanceOf(address(manager)), SUPPLY / 2);
-        // Even when another endpoint is a taxable venue, manager settlement must arrive whole.
-        manager.send(token, address(venue), 100 ether);
-        assertEq(token.balanceOf(address(venue)), 100 ether);
-        venue.send(token, address(manager), 100 ether);
-        assertEq(token.balanceOf(address(manager)), SUPPLY / 2);
         assertEq(token.balanceOf(treasury), 0);
     }
 
-    function test_PoolManagerTransferFromSpendsFullAllowanceAndDeliversFullAmount() public {
+    function test_PoolManagerTransfersToAndFromRegisteredVenuesPayFee() public {
+        _configure();
+        _fund(address(manager), 100 ether);
+        manager.send(token, address(venue), 100 ether);
+        assertEq(token.balanceOf(address(venue)), 98 ether);
+        assertEq(token.balanceOf(treasury), 2 ether);
+        venue.send(token, address(manager), 98 ether);
+        assertEq(token.balanceOf(address(venue)), 0);
+        assertEq(token.balanceOf(address(manager)), 96.04 ether);
+        assertEq(token.balanceOf(treasury), 3.96 ether);
+    }
+
+    function test_PoolManagerTransferFromSpendsGrossAllowanceAndPaysVenueFee() public {
         _configure();
         _fund(alice, 100 ether);
         vm.prank(alice);
         token.approve(address(manager), 100 ether);
         vm.prank(address(manager));
         token.transferFrom(alice, address(venue), 100 ether);
-        assertEq(token.balanceOf(address(venue)), 100 ether);
+        assertEq(token.balanceOf(address(venue)), 98 ether);
         assertEq(token.allowance(alice, address(manager)), 0);
-        assertEq(token.balanceOf(treasury), 0);
+        assertEq(token.balanceOf(treasury), 2 ether);
     }
 
     function test_DistributorResolvedAfterDeploymentAndClaimsStayExact() public {
@@ -92,7 +99,7 @@ contract WorkersLaunchTest is WorkersFixture {
         assertEq(token.balanceOf(treasury), 2 ether);
     }
 
-    function test_RegistryFailureHasClearErrorWithoutAffectingPlainOrManagerTransfers() public {
+    function test_RegistryFailureRevertsVenueTransfersButAllowsPlainSettlement() public {
         _configure();
         _fund(alice, 100 ether);
         _fund(address(venue), 100 ether);
@@ -106,8 +113,16 @@ contract WorkersLaunchTest is WorkersFixture {
         vm.prank(alice);
         token.transfer(bob, 100 ether);
         assertEq(token.balanceOf(bob), 100 ether);
+        vm.expectRevert(Workers.DistributorLookupFailed.selector);
         venue.send(token, address(manager), 100 ether);
+        assertEq(token.balanceOf(address(venue)), 100 ether);
+        vm.prank(bob);
+        token.transfer(address(manager), 100 ether);
         assertEq(token.balanceOf(address(manager)), 100 ether);
+        manager.send(token, alice, 100 ether);
+        assertEq(token.balanceOf(alice), 100 ether);
+        assertEq(token.balanceOf(address(manager)), 0);
+        assertEq(token.balanceOf(treasury), 0);
     }
 
     function test_ExemptAndPrivilegedCallersStillNeedHolderAllowance() public {

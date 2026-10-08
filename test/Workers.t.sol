@@ -282,12 +282,11 @@ contract WorkersTest is WorkersFixture {
     function test_FeeRecipientAsReceiverReceivesFeeAndNetWithoutDoubleTax() public {
         _configure();
         vm.prank(admin);
-        token.setFeeRecipient(address(venue));
-        _fund(alice, 100 ether);
-        vm.prank(alice);
-        token.transfer(address(venue), 100 ether);
-        assertEq(token.balanceOf(alice), 0);
-        assertEq(token.balanceOf(address(venue)), 100 ether);
+        token.setFeeRecipient(alice);
+        _fund(address(venue), 100 ether);
+        venue.send(token, alice, 100 ether);
+        assertEq(token.balanceOf(alice), 100 ether);
+        assertEq(token.balanceOf(address(venue)), 0);
         assertEq(token.totalSupply(), SUPPLY);
     }
 

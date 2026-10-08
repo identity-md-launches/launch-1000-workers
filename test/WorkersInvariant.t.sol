@@ -31,8 +31,7 @@ contract WorkersHandler is Test {
         // Independent balance model, including sender/receiver/fee-recipient aliasing.
         uint256[] memory expected = new uint256[](accounts.length);
         uint256 fee;
-        bool exempt = caller == factory || caller == manager || from == manager || to == manager
-            || caller == distributor || from == distributor || to == distributor;
+        bool exempt = caller == factory || caller == distributor || from == distributor || to == distributor;
         if (!exempt && (token.isTradeVenue(from) || token.isTradeVenue(to))) fee = amount / 50;
         for (uint256 i; i < accounts.length; ++i) {
             uint256 balance = token.balanceOf(accounts[i]);
@@ -57,13 +56,27 @@ contract WorkersHandler is Test {
     }
 
     function changeRecipient(uint256 seed) external {
+        address recipient = accounts[seed % accounts.length];
+        if (recipient == factory || recipient == manager || recipient == distributor || token.isTradeVenue(recipient)) {
+            vm.prank(admin);
+            vm.expectRevert(abi.encodeWithSelector(Workers.InvalidFeeRecipient.selector, recipient));
+            token.setFeeRecipient(recipient);
+            return;
+        }
         vm.prank(admin);
-        token.setFeeRecipient(accounts[seed % accounts.length]);
+        token.setFeeRecipient(recipient);
     }
 
     function changeVenue(bool second, bool enabled) external {
+        address venue = accounts[second ? 3 : 2];
+        if (enabled && venue == token.feeRecipient()) {
+            vm.prank(admin);
+            vm.expectRevert(abi.encodeWithSelector(Workers.InvalidTradeVenue.selector, venue));
+            token.setTradeVenue(venue, true);
+            return;
+        }
         vm.prank(admin);
-        token.setTradeVenue(accounts[second ? 3 : 2], enabled);
+        token.setTradeVenue(venue, enabled);
     }
 }
 

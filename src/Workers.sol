@@ -40,7 +40,7 @@ contract Workers is ERC20, Ownable2Step {
     /// @param factory_ Launch factory, also the deploying caller ($factory).
     /// @param poolManager_ Verified launch PoolManager ($poolManager).
     /// @param launchNumber_ Launch registry key ($launchNumber).
-    /// @param initialOwner_ Requester's administration address ($requester); does not receive the mint.
+    /// @param initialOwner_ Requester's literal administration address; does not receive the mint.
     constructor(address factory_, address poolManager_, uint64 launchNumber_, address initialOwner_)
         ERC20("Workers", "WORK")
         Ownable(initialOwner_)
@@ -51,6 +51,7 @@ contract Workers is ERC20, Ownable2Step {
         if (poolManager_ == address(0) || poolManager_.code.length == 0 || poolManager_ == factory_) {
             revert InvalidPoolManager(poolManager_);
         }
+        if (initialOwner_ == factory_ || initialOwner_ == poolManager_) revert OwnableInvalidOwner(initialOwner_);
         launchFactory = factory_;
         poolManager = poolManager_;
         launchNumber = launchNumber_;
@@ -59,20 +60,23 @@ contract Workers is ERC20, Ownable2Step {
 
     /// @notice Set the real fee destination; this cannot change the fee rate or any balance.
     function setFeeRecipient(address recipient) external onlyOwner {
-        if (recipient == address(0) || recipient == address(this)) revert InvalidFeeRecipient(recipient);
+        if (
+            recipient == address(0) || recipient == address(this) || recipient == launchFactory
+                || recipient == poolManager || isTradeVenue[recipient] || recipient == launchDistributor()
+        ) revert InvalidFeeRecipient(recipient);
         address previous = feeRecipient;
         feeRecipient = recipient;
         emit FeeRecipientUpdated(previous, recipient);
     }
 
     /// @notice Register or remove a fee-aware venue. Unregistered transfers are untaxed.
-    /// @dev Configure the recipient first. Protected launch endpoints cannot be registered.
+    /// @dev Configure the recipient first. Protected launch endpoints and the fee recipient cannot be registered.
     function setTradeVenue(address venue, bool enabled) external onlyOwner {
         if (enabled) {
             if (feeRecipient == address(0)) revert FeeRecipientNotConfigured();
             if (
                 venue.code.length == 0 || venue == address(this) || venue == launchFactory || venue == poolManager
-                    || venue == launchDistributor()
+                    || venue == feeRecipient || venue == launchDistributor()
             ) revert InvalidTradeVenue(venue);
         }
         isTradeVenue[venue] = enabled;
@@ -96,9 +100,11 @@ contract Workers is ERC20, Ownable2Step {
 
     function _update(address from, address to, uint256 amount) internal override {
         // Minting happens only in the constructor. Neither mint nor burn is externally exposed.
+        // Manager settlement is untaxed when neither endpoint is a venue. Manager-to-venue
+        // transfers must pay the fee because anyone can relay tokens through the manager.
         if (
-            from == address(0) || to == address(0) || msg.sender == launchFactory || msg.sender == poolManager
-                || from == poolManager || to == poolManager || (!isTradeVenue[from] && !isTradeVenue[to])
+            from == address(0) || to == address(0) || msg.sender == launchFactory
+                || (!isTradeVenue[from] && !isTradeVenue[to])
         ) {
             super._update(from, to, amount);
             return;
